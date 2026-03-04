@@ -1,0 +1,28 @@
+strategy: random  # random | round-robin | least-recent
+
+squads:
+  - name: payments
+    members:
+      - alice
+      - bob
+      - charlie
+    paths:
+      - src/payments/**
+      - src/billing/**
+
+  - name: platform
+    members:
+      - dave
+      - eve
+      - frank
+    paths:
+      - src/infra/**
+      - src/auth/**
+
+  - name: growth
+    members:
+      - grace
+      - heidi
+    paths:
+      - src/growth/**
+      - src/onboarding/**

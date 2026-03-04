@@ -1,0 +1,16 @@
+name: "Who Reviews"
+description: "Automatically assign PR reviewers based on code ownership (squads)"
+inputs:
+  config-path:
+    description: "Path to squads config file"
+    required: false
+    default: ".github/squads.yml"
+  github-token:
+    description: "GitHub token for API access"
+    required: true
+runs:
+  using: "docker"
+  image: "Dockerfile"
+branding:
+  icon: "users"
+  color: "blue"
