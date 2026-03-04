@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from pr_review_action.strategies import (
+from who_reviews.strategies import (
     LeastRecentStrategy,
     RandomStrategy,
     RoundRobinStrategy,

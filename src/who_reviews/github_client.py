@@ -2,11 +2,25 @@ from __future__ import annotations
 
 import httpx
 
+from who_reviews.http_retry import RetryTransport
+
 
 class GitHubClient:
-    def __init__(self, token: str, base_url: str = "https://api.github.com") -> None:
+    def __init__(
+        self,
+        token: str,
+        base_url: str = "https://api.github.com",
+        *,
+        max_retries: int = 3,
+        backoff_base: float = 1.0,
+    ) -> None:
+        transport = RetryTransport(
+            max_retries=max_retries,
+            backoff_base=backoff_base,
+        )
         self._client = httpx.Client(
             base_url=base_url,
+            transport=transport,
             headers={
                 "Authorization": f"Bearer {token}",
                 "Accept": "application/vnd.github+json",

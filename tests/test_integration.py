@@ -8,10 +8,10 @@ import pytest
 import respx
 import yaml
 
-from pr_review_action.config import load_config
-from pr_review_action.github_client import GitHubClient
-from pr_review_action.reviewer_selector import ReviewerSelector
-from pr_review_action.strategies import RandomStrategy
+from who_reviews.config import load_config
+from who_reviews.github_client import GitHubClient
+from who_reviews.reviewer_selector import ReviewerSelector
+from who_reviews.strategies import RandomStrategy
 
 REPO = "org/test-repo"
 PR_NUMBER = 99
@@ -207,6 +207,25 @@ class TestGitHubApiInteraction:
         assert len(files) == 101
 
 
+class TestRetryIntegration:
+    @respx.mock(base_url=BASE_URL, assert_all_called=False)
+    def test_retries_on_502_then_succeeds(
+        self, config_file: Path, respx_mock: respx.MockRouter
+    ) -> None:
+        respx_mock.get(f"/repos/{REPO}/pulls/{PR_NUMBER}/files").mock(
+            side_effect=[
+                httpx.Response(502),
+                httpx.Response(200, json=[{"filename": "src/payments/stripe.py"}]),
+                httpx.Response(200, json=[]),
+            ]
+        )
+
+        client = GitHubClient(token="fake-token", max_retries=3, backoff_base=0.0)
+        files = client.get_changed_files(REPO, PR_NUMBER)
+
+        assert files == ["src/payments/stripe.py"]
+
+
 class TestMainEntryPoint:
     @respx.mock(base_url=BASE_URL)
     def test_end_to_end_via_env_vars(
@@ -225,7 +244,7 @@ class TestMainEntryPoint:
         _mock_files_endpoint(respx_mock, ["src/payments/stripe.py"])
         assign_route = _mock_assign_endpoint(respx_mock)
 
-        from pr_review_action.main import run
+        from who_reviews.main import run
 
         run()
 

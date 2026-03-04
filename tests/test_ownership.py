@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from pr_review_action.config import ReviewConfig
-from pr_review_action.ownership import resolve_ownership
+from who_reviews.config import ReviewConfig
+from who_reviews.ownership import resolve_ownership
 
 
 class TestResolveOwnership:

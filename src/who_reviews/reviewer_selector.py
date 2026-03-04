@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from pr_review_action.config import ReviewConfig, SquadConfig
-from pr_review_action.ownership import resolve_ownership
-from pr_review_action.strategies.base import SelectionContext, SelectionStrategy
+from who_reviews.config import ReviewConfig, SquadConfig
+from who_reviews.ownership import resolve_ownership
+from who_reviews.strategies.base import SelectionContext, SelectionStrategy
 
 
 class ReviewerSelector:
@@ -26,14 +26,20 @@ class ReviewerSelector:
 
     def _select_no_ownership(self, author: str, repo: str, pr_number: int) -> list[str]:
         candidates = sorted(self._config.all_members - {author})
-        if len(candidates) < 2:
-            return candidates
+        total = self._config.squad_reviewers + self._config.outsider_reviewers
+        if not candidates or total == 0:
+            return []
 
+        reviewers: list[str] = []
         ctx = SelectionContext(repo=repo, pr_number=pr_number, role="fallback")
-        first = self._strategy.select(candidates, ctx)
-        remaining = [c for c in candidates if c != first]
-        second = self._strategy.select(remaining, ctx)
-        return [first, second]
+        for _ in range(min(total, len(candidates))):
+            remaining = [c for c in candidates if c not in reviewers]
+            if not remaining:
+                break
+            selected = self._strategy.select(remaining, ctx)
+            reviewers.append(selected)
+
+        return reviewers
 
     def _select_with_ownership(
         self,
@@ -45,31 +51,31 @@ class ReviewerSelector:
         reviewers: list[str] = []
 
         for squad in affected_squads:
-            candidates = sorted(set(squad.members) - {author} - set(reviewers))
-            if not candidates:
-                continue
             ctx = SelectionContext(
                 repo=repo, pr_number=pr_number, role=f"squad-{squad.name}"
             )
-            selected = self._strategy.select(candidates, ctx)
-            reviewers.append(selected)
+            for _ in range(self._config.squad_reviewers):
+                candidates = sorted(set(squad.members) - {author} - set(reviewers))
+                if not candidates:
+                    break
+                selected = self._strategy.select(candidates, ctx)
+                reviewers.append(selected)
 
-        outsider = self._pick_outsider(
+        outsiders = self._pick_outsiders(
             affected_squads, author, reviewers, repo, pr_number
         )
-        if outsider:
-            reviewers.append(outsider)
+        reviewers.extend(outsiders)
 
         return reviewers
 
-    def _pick_outsider(
+    def _pick_outsiders(
         self,
         affected_squads: list[SquadConfig],
         author: str,
         already_selected: list[str],
         repo: str,
         pr_number: int,
-    ) -> str | None:
+    ) -> list[str]:
         affected_members: set[str] = set()
         for squad in affected_squads:
             affected_members.update(squad.members)
@@ -81,7 +87,15 @@ class ReviewerSelector:
             - set(already_selected)
         )
         if not outsider_candidates:
-            return None
+            return []
 
         ctx = SelectionContext(repo=repo, pr_number=pr_number, role="outsider")
-        return self._strategy.select(outsider_candidates, ctx)
+        result: list[str] = []
+        for _ in range(self._config.outsider_reviewers):
+            remaining = [c for c in outsider_candidates if c not in result]
+            if not remaining:
+                break
+            selected = self._strategy.select(remaining, ctx)
+            result.append(selected)
+
+        return result

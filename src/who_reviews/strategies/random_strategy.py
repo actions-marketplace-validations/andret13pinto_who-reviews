@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import random
 
-from pr_review_action.strategies.base import SelectionContext
+from who_reviews.strategies.base import SelectionContext
 
 
 class RandomStrategy:

@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from pr_review_action.config import ReviewConfig, load_config
+from who_reviews.config import ReviewConfig, load_config
 
 
 class TestReviewConfig:
@@ -32,15 +32,15 @@ class TestReviewConfig:
                 ],
             )
 
-    def test_rejects_duplicate_members(self) -> None:
-        with pytest.raises(ValueError, match="is in both"):
-            ReviewConfig(
-                strategy="random",
-                squads=[
-                    {"name": "a", "members": ["alice", "bob"], "paths": ["src/a/**"]},  # type: ignore[list-item]
-                    {"name": "b", "members": ["alice"], "paths": ["src/b/**"]},  # type: ignore[list-item]
-                ],
-            )
+    def test_allows_shared_members_across_squads(self) -> None:
+        config = ReviewConfig(
+            strategy="random",
+            squads=[
+                {"name": "a", "members": ["alice", "bob"], "paths": ["src/a/**"]},  # type: ignore[list-item]
+                {"name": "b", "members": ["alice"], "paths": ["src/b/**"]},  # type: ignore[list-item]
+            ],
+        )
+        assert config.all_members == {"alice", "bob"}
 
     def test_rejects_empty_members(self) -> None:
         with pytest.raises(ValueError, match="has no members"):
@@ -63,6 +63,42 @@ class TestReviewConfig:
     def test_all_members(self, review_config: ReviewConfig) -> None:
         expected = {"alice", "bob", "charlie", "dave", "eve", "frank", "grace", "heidi"}
         assert review_config.all_members == expected
+
+
+class TestReviewerCountConfig:
+    def test_defaults(self) -> None:
+        config = ReviewConfig(
+            squads=[{"name": "a", "members": ["alice"], "paths": ["src/**"]}],  # type: ignore[list-item]
+        )
+        assert config.squad_reviewers == 1
+        assert config.outsider_reviewers == 1
+
+    @pytest.mark.parametrize(
+        ("squad_reviewers", "outsider_reviewers"),
+        [(2, 3), (0, 0), (5, 0), (0, 5)],
+    )
+    def test_custom_values(self, squad_reviewers: int, outsider_reviewers: int) -> None:
+        config = ReviewConfig(
+            squads=[{"name": "a", "members": ["alice"], "paths": ["src/**"]}],  # type: ignore[list-item]
+            squad_reviewers=squad_reviewers,
+            outsider_reviewers=outsider_reviewers,
+        )
+        assert config.squad_reviewers == squad_reviewers
+        assert config.outsider_reviewers == outsider_reviewers
+
+    @pytest.mark.parametrize(
+        ("squad_reviewers", "outsider_reviewers"),
+        [(-1, 1), (1, -1), (-1, -1)],
+    )
+    def test_rejects_negative_values(
+        self, squad_reviewers: int, outsider_reviewers: int
+    ) -> None:
+        with pytest.raises(ValueError):
+            ReviewConfig(
+                squads=[{"name": "a", "members": ["alice"], "paths": ["src/**"]}],  # type: ignore[list-item]
+                squad_reviewers=squad_reviewers,
+                outsider_reviewers=outsider_reviewers,
+            )
 
 
 class TestLoadConfig:

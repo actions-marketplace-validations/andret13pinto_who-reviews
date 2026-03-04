@@ -13,9 +13,11 @@ A GitHub Action that automatically assigns PR reviewers based on code ownership.
 
 | Scenario | Reviewers |
 |----------|-----------|
-| Single squad touched | 1 from that squad + 1 outsider |
-| Multiple squads touched | 1 from each squad + 1 outsider |
-| No squad owns the files | 2 random from all members |
+| Single squad touched | `squad_reviewers` from that squad + `outsider_reviewers` outsiders |
+| Multiple squads touched | `squad_reviewers` from each squad + `outsider_reviewers` outsiders |
+| No squad owns the files | `squad_reviewers + outsider_reviewers` random from all members |
+
+By default, `squad_reviewers=1` and `outsider_reviewers=1`, matching the original behavior. Both can be set to `0` (e.g., only squad reviewers, or only outsiders). When there aren't enough candidates, as many as available are picked.
 
 The PR author is always excluded from candidates.
 
@@ -27,6 +29,8 @@ By default, the action looks for the config file at `.github/squads.yml` — no 
 
 ```yaml
 strategy: random  # random | round-robin | least-recent
+squad_reviewers: 1   # reviewers picked per affected squad (default: 1)
+outsider_reviewers: 1 # reviewers picked from outside affected squads (default: 1)
 
 squads:
   - name: payments
@@ -87,7 +91,7 @@ Round-robin and least-recent persist state in `.pr-review-state.json`. This file
 
 The config is validated on load. It will reject:
 - Empty squads (no members or no paths)
-- Duplicate members across squads
+- Negative reviewer counts
 - Invalid strategy names
 
 ## Development

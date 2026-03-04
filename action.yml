@@ -17,7 +17,7 @@ runs:
         key: who-reviews-state-${{ github.repository }}
     - run: pip install ${{ github.action_path }}
       shell: bash
-    - run: python -m pr_review_action.main
+    - run: python -m who_reviews.main
       shell: bash
       env:
         INPUT_GITHUB-TOKEN: ${{ github.token }}

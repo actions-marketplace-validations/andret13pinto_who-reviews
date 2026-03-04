@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 
 class SquadConfig(BaseModel):
@@ -16,11 +16,12 @@ class SquadConfig(BaseModel):
 class ReviewConfig(BaseModel):
     strategy: Literal["random", "round-robin", "least-recent"] = "random"
     squads: list[SquadConfig]
+    squad_reviewers: int = Field(default=1, ge=0)
+    outsider_reviewers: int = Field(default=1, ge=0)
 
     @model_validator(mode="after")
     def _validate_squads(self) -> ReviewConfig:
         self._check_no_empty_squads()
-        self._check_no_duplicate_members()
         return self
 
     def _check_no_empty_squads(self) -> None:
@@ -29,18 +30,6 @@ class ReviewConfig(BaseModel):
                 raise ValueError(f"Squad '{squad.name}' has no members")
             if not squad.paths:
                 raise ValueError(f"Squad '{squad.name}' has no paths")
-
-    def _check_no_duplicate_members(self) -> None:
-        seen: dict[str, str] = {}
-        for squad in self.squads:
-            for member in squad.members:
-                if member in seen:
-                    msg = (
-                        f"Member '{member}' is in both "
-                        f"'{seen[member]}' and '{squad.name}'"
-                    )
-                    raise ValueError(msg)
-                seen[member] = squad.name
 
     @property
     def all_members(self) -> set[str]:

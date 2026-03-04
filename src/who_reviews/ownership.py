@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fnmatch import fnmatch
 
-from pr_review_action.config import ReviewConfig, SquadConfig
+from who_reviews.config import ReviewConfig, SquadConfig
 
 
 def resolve_ownership(

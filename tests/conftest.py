@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from pr_review_action.config import ReviewConfig, SquadConfig
-from pr_review_action.strategies.base import SelectionContext, SelectionStrategy
+from who_reviews.config import ReviewConfig, SquadConfig
+from who_reviews.strategies.base import SelectionContext, SelectionStrategy
 
 
 @pytest.fixture()

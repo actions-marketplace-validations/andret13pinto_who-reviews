@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import pytest
 
-from pr_review_action.config import ReviewConfig
-from pr_review_action.reviewer_selector import ReviewerSelector
-from pr_review_action.strategies.base import SelectionStrategy
+from who_reviews.config import ReviewConfig
+from who_reviews.reviewer_selector import ReviewerSelector
+from who_reviews.strategies.base import SelectionStrategy
 
 REPO = "org/repo"
 PR = 42
@@ -148,6 +148,273 @@ class TestMultipleSquads:
         # but outsider pool is empty since all members belong to affected squads
         assert len(result) == 3
         assert "alice" not in result
+
+
+class TestOverlappingSquads:
+    """When a member belongs to multiple affected squads, they are only picked once."""
+
+    def test_shared_member_not_picked_twice(
+        self,
+        deterministic_strategy: SelectionStrategy,
+    ) -> None:
+        config = ReviewConfig(
+            strategy="random",
+            squads=[
+                {
+                    "name": "payments",
+                    "members": ["alice", "bob"],
+                    "paths": ["src/payments/**"],
+                },  # type: ignore[list-item]
+                {
+                    "name": "platform",
+                    "members": ["alice", "charlie"],
+                    "paths": ["src/infra/**"],
+                },  # type: ignore[list-item]
+                {
+                    "name": "growth",
+                    "members": ["dave", "eve"],
+                    "paths": ["src/growth/**"],
+                },  # type: ignore[list-item]
+            ],
+        )
+        selector = ReviewerSelector(config, deterministic_strategy)
+
+        result = selector.select_reviewers(
+            changed_files=["src/payments/stripe.py", "src/infra/deploy.py"],
+            author="frank",
+            repo=REPO,
+            pr_number=PR,
+        )
+
+        assert len(result) == len(set(result))
+        assert len(result) == 3  # 1 per squad + outsider
+
+    def test_fully_overlapping_squads_still_picks_distinct(
+        self,
+        deterministic_strategy: SelectionStrategy,
+    ) -> None:
+        config = ReviewConfig(
+            strategy="random",
+            squads=[
+                {"name": "a", "members": ["alice", "bob"], "paths": ["src/a/**"]},  # type: ignore[list-item]
+                {"name": "b", "members": ["alice", "bob"], "paths": ["src/b/**"]},  # type: ignore[list-item]
+                {"name": "other", "members": ["charlie"], "paths": ["lib/**"]},  # type: ignore[list-item]
+            ],
+        )
+        selector = ReviewerSelector(config, deterministic_strategy)
+
+        result = selector.select_reviewers(
+            changed_files=["src/a/foo.py", "src/b/bar.py"],
+            author="charlie",
+            repo=REPO,
+            pr_number=PR,
+        )
+
+        # alice picked for squad a, bob for squad b, no outsider (charlie is author)
+        assert result == ["alice", "bob"]
+        assert len(result) == len(set(result))
+
+
+class TestConfigurableReviewerCounts:
+    """Verify squad_reviewers and outsider_reviewers config fields."""
+
+    def test_two_squad_one_outsider(
+        self,
+        deterministic_strategy: SelectionStrategy,
+    ) -> None:
+        config = ReviewConfig(
+            squads=[
+                {
+                    "name": "payments",
+                    "members": ["alice", "bob", "charlie"],
+                    "paths": ["src/payments/**"],
+                },  # type: ignore[list-item]
+                {
+                    "name": "other",
+                    "members": ["dave", "eve"],
+                    "paths": ["lib/**"],
+                },  # type: ignore[list-item]
+            ],
+            squad_reviewers=2,
+            outsider_reviewers=1,
+        )
+        selector = ReviewerSelector(config, deterministic_strategy)
+
+        result = selector.select_reviewers(
+            changed_files=["src/payments/stripe.py"],
+            author="frank",
+            repo=REPO,
+            pr_number=PR,
+        )
+
+        payments = {"alice", "bob", "charlie"}
+        outsiders = config.all_members - payments - {"frank"}
+        assert len(result) == 3
+        assert set(result[:2]).issubset(payments)
+        assert result[2] in outsiders
+
+    def test_one_squad_two_outsiders(
+        self,
+        deterministic_strategy: SelectionStrategy,
+    ) -> None:
+        config = ReviewConfig(
+            squads=[
+                {
+                    "name": "payments",
+                    "members": ["alice", "bob"],
+                    "paths": ["src/payments/**"],
+                },  # type: ignore[list-item]
+                {
+                    "name": "other",
+                    "members": ["charlie", "dave", "eve"],
+                    "paths": ["lib/**"],
+                },  # type: ignore[list-item]
+            ],
+            squad_reviewers=1,
+            outsider_reviewers=2,
+        )
+        selector = ReviewerSelector(config, deterministic_strategy)
+
+        result = selector.select_reviewers(
+            changed_files=["src/payments/stripe.py"],
+            author="frank",
+            repo=REPO,
+            pr_number=PR,
+        )
+
+        payments = {"alice", "bob"}
+        outsiders = config.all_members - payments - {"frank"}
+        assert len(result) == 3
+        assert result[0] in payments
+        assert set(result[1:]).issubset(outsiders)
+
+    def test_squad_only_no_outsider(
+        self,
+        deterministic_strategy: SelectionStrategy,
+    ) -> None:
+        config = ReviewConfig(
+            squads=[
+                {
+                    "name": "payments",
+                    "members": ["alice", "bob", "charlie"],
+                    "paths": ["src/payments/**"],
+                },  # type: ignore[list-item]
+                {
+                    "name": "other",
+                    "members": ["dave"],
+                    "paths": ["lib/**"],
+                },  # type: ignore[list-item]
+            ],
+            squad_reviewers=1,
+            outsider_reviewers=0,
+        )
+        selector = ReviewerSelector(config, deterministic_strategy)
+
+        result = selector.select_reviewers(
+            changed_files=["src/payments/stripe.py"],
+            author="eve",
+            repo=REPO,
+            pr_number=PR,
+        )
+
+        payments = {"alice", "bob", "charlie"}
+        assert len(result) == 1
+        assert result[0] in payments
+
+    def test_outsiders_only_no_squad(
+        self,
+        deterministic_strategy: SelectionStrategy,
+    ) -> None:
+        config = ReviewConfig(
+            squads=[
+                {
+                    "name": "payments",
+                    "members": ["alice", "bob"],
+                    "paths": ["src/payments/**"],
+                },  # type: ignore[list-item]
+                {
+                    "name": "other",
+                    "members": ["charlie", "dave", "eve"],
+                    "paths": ["lib/**"],
+                },  # type: ignore[list-item]
+            ],
+            squad_reviewers=0,
+            outsider_reviewers=2,
+        )
+        selector = ReviewerSelector(config, deterministic_strategy)
+
+        result = selector.select_reviewers(
+            changed_files=["src/payments/stripe.py"],
+            author="frank",
+            repo=REPO,
+            pr_number=PR,
+        )
+
+        payments = {"alice", "bob"}
+        outsiders = config.all_members - payments - {"frank"}
+        assert len(result) == 2
+        assert set(result).issubset(outsiders)
+
+    def test_no_ownership_custom_counts(
+        self,
+        deterministic_strategy: SelectionStrategy,
+    ) -> None:
+        config = ReviewConfig(
+            squads=[
+                {
+                    "name": "a",
+                    "members": ["alice", "bob", "charlie", "dave"],
+                    "paths": ["src/**"],
+                },  # type: ignore[list-item]
+            ],
+            squad_reviewers=2,
+            outsider_reviewers=1,
+        )
+        selector = ReviewerSelector(config, deterministic_strategy)
+
+        result = selector.select_reviewers(
+            changed_files=["README.md"],
+            author="alice",
+            repo=REPO,
+            pr_number=PR,
+        )
+
+        assert len(result) == 3
+        assert "alice" not in result
+
+    def test_not_enough_candidates_picks_available(
+        self,
+        deterministic_strategy: SelectionStrategy,
+    ) -> None:
+        config = ReviewConfig(
+            squads=[
+                {
+                    "name": "payments",
+                    "members": ["alice", "bob"],
+                    "paths": ["src/payments/**"],
+                },  # type: ignore[list-item]
+                {
+                    "name": "other",
+                    "members": ["charlie"],
+                    "paths": ["lib/**"],
+                },  # type: ignore[list-item]
+            ],
+            squad_reviewers=5,
+            outsider_reviewers=5,
+        )
+        selector = ReviewerSelector(config, deterministic_strategy)
+
+        result = selector.select_reviewers(
+            changed_files=["src/payments/stripe.py"],
+            author="dave",
+            repo=REPO,
+            pr_number=PR,
+        )
+
+        # Only 2 in payments squad, 1 outsider available
+        assert len(result) <= 3
+        assert len(result) == len(set(result))
+        assert "dave" not in result
 
 
 class TestEdgeCases:

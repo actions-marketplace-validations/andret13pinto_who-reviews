@@ -5,10 +5,10 @@ import os
 import sys
 from pathlib import Path
 
-from pr_review_action.config import load_config
-from pr_review_action.github_client import GitHubClient
-from pr_review_action.reviewer_selector import ReviewerSelector
-from pr_review_action.strategies import (
+from who_reviews.config import load_config
+from who_reviews.github_client import GitHubClient
+from who_reviews.reviewer_selector import ReviewerSelector
+from who_reviews.strategies import (
     LeastRecentStrategy,
     RandomStrategy,
     RoundRobinStrategy,
