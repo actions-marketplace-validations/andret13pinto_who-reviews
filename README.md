@@ -19,6 +19,10 @@ A GitHub Action that automatically assigns PR reviewers based on code ownership.
 
 By default, `squad_reviewers=1` and `outsider_reviewers=1`, matching the original behavior. Both can be set to `0` (e.g., only squad reviewers, or only outsiders). When there aren't enough candidates, as many as available are picked.
 
+### Deficit compensation
+
+When a squad doesn't have enough candidates (e.g., the PR author is the only member), the shortfall is compensated by picking extra outsiders. This ensures the total reviewer count stays consistent regardless of who opens the PR.
+
 The PR author is always excluded from candidates.
 
 ## Setup

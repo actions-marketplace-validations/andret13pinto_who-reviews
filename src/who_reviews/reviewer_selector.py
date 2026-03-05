@@ -49,20 +49,23 @@ class ReviewerSelector:
         pr_number: int,
     ) -> list[str]:
         reviewers: list[str] = []
+        expected_squad_picks = 0
 
         for squad in affected_squads:
             ctx = SelectionContext(
                 repo=repo, pr_number=pr_number, role=f"squad-{squad.name}"
             )
             for _ in range(self._config.squad_reviewers):
+                expected_squad_picks += 1
                 candidates = sorted(set(squad.members) - {author} - set(reviewers))
                 if not candidates:
                     break
                 selected = self._strategy.select(candidates, ctx)
                 reviewers.append(selected)
 
+        squad_deficit = expected_squad_picks - len(reviewers)
         outsiders = self._pick_outsiders(
-            affected_squads, author, reviewers, repo, pr_number
+            affected_squads, author, reviewers, repo, pr_number, squad_deficit
         )
         reviewers.extend(outsiders)
 
@@ -75,6 +78,7 @@ class ReviewerSelector:
         already_selected: list[str],
         repo: str,
         pr_number: int,
+        squad_deficit: int = 0,
     ) -> list[str]:
         affected_members: set[str] = set()
         for squad in affected_squads:
@@ -91,7 +95,8 @@ class ReviewerSelector:
 
         ctx = SelectionContext(repo=repo, pr_number=pr_number, role="outsider")
         result: list[str] = []
-        for _ in range(self._config.outsider_reviewers):
+        outsider_count = self._config.outsider_reviewers + squad_deficit
+        for _ in range(outsider_count):
             remaining = [c for c in outsider_candidates if c not in result]
             if not remaining:
                 break

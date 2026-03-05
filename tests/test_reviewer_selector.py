@@ -418,7 +418,7 @@ class TestConfigurableReviewerCounts:
 
 
 class TestEdgeCases:
-    def test_author_is_sole_squad_member(
+    def test_author_is_sole_squad_member_compensates_with_outsiders(
         self,
         deterministic_strategy: SelectionStrategy,
     ) -> None:
@@ -438,9 +438,10 @@ class TestEdgeCases:
             pr_number=PR,
         )
 
-        # No one from solo squad, but should get outsider
+        # squad pick fails (alice is author and sole member), deficit of 1
+        # compensated: 1 (outsider_reviewers) + 1 (deficit) = 2 outsiders
         assert "alice" not in result
-        assert len(result) >= 1
+        assert len(result) == 2
 
     @pytest.mark.parametrize(
         "author",
