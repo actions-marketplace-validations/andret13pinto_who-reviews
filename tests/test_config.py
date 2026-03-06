@@ -42,14 +42,39 @@ class TestReviewConfig:
         )
         assert config.all_members == {"alice", "bob"}
 
-    def test_rejects_empty_members(self) -> None:
-        with pytest.raises(ValueError, match="has no members"):
+    def test_rejects_no_members_and_no_team(self) -> None:
+        with pytest.raises(ValueError, match="must have at least"):
             ReviewConfig(
                 strategy="random",
                 squads=[
                     {"name": "empty", "members": [], "paths": ["src/**"]},  # type: ignore[list-item]
                 ],
             )
+
+    def test_accepts_team_without_members(self) -> None:
+        config = ReviewConfig(
+            strategy="random",
+            squads=[
+                {"name": "a", "team": "my-team", "paths": ["src/**"]},  # type: ignore[list-item]
+            ],
+        )
+        assert config.squads[0].team == "my-team"
+        assert config.squads[0].members == []
+
+    def test_accepts_team_with_members(self) -> None:
+        config = ReviewConfig(
+            strategy="random",
+            squads=[
+                {
+                    "name": "a",
+                    "team": "my-team",
+                    "members": ["alice"],
+                    "paths": ["src/**"],
+                },  # type: ignore[list-item]
+            ],
+        )
+        assert config.squads[0].team == "my-team"
+        assert config.squads[0].members == ["alice"]
 
     def test_rejects_empty_paths(self) -> None:
         with pytest.raises(ValueError, match="has no paths"):
@@ -99,6 +124,40 @@ class TestReviewerCountConfig:
                 squad_reviewers=squad_reviewers,
                 outsider_reviewers=outsider_reviewers,
             )
+
+
+class TestOutsiderTeamConfig:
+    def test_outsider_source_team_requires_outsider_team(self) -> None:
+        with pytest.raises(ValueError, match="outsider_team"):
+            ReviewConfig(
+                squads=[{"name": "a", "members": ["alice"], "paths": ["src/**"]}],  # type: ignore[list-item]
+                outsider_source="team",
+            )
+
+    def test_outsider_source_team_with_outsider_team(self) -> None:
+        config = ReviewConfig(
+            squads=[{"name": "a", "members": ["alice"], "paths": ["src/**"]}],  # type: ignore[list-item]
+            outsider_source="team",
+            outsider_team="senior-devs",
+        )
+        assert config.outsider_team == "senior-devs"
+
+    def test_has_team_refs_with_squad_team(self) -> None:
+        config = ReviewConfig(
+            squads=[{"name": "a", "team": "my-team", "paths": ["src/**"]}],  # type: ignore[list-item]
+        )
+        assert config.has_team_refs is True
+
+    def test_has_team_refs_with_outsider_team(self) -> None:
+        config = ReviewConfig(
+            squads=[{"name": "a", "members": ["alice"], "paths": ["src/**"]}],  # type: ignore[list-item]
+            outsider_source="team",
+            outsider_team="senior-devs",
+        )
+        assert config.has_team_refs is True
+
+    def test_has_team_refs_false_by_default(self, review_config: ReviewConfig) -> None:
+        assert review_config.has_team_refs is False
 
 
 class TestLoadConfig:

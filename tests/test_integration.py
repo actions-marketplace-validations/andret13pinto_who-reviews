@@ -84,6 +84,18 @@ def _mock_contributors_endpoint(
     )
 
 
+def _mock_team_members_endpoint(
+    mock: respx.MockRouter, org: str, team_slug: str, logins: list[str]
+) -> respx.Route:
+    page1 = [{"login": login} for login in logins]
+    return mock.get(f"/orgs/{org}/teams/{team_slug}/members").mock(
+        side_effect=[
+            httpx.Response(200, json=page1),
+            httpx.Response(200, json=[]),
+        ]
+    )
+
+
 def _mock_assign_endpoint(mock: respx.MockRouter) -> respx.Route:
     return mock.post(f"/repos/{REPO}/pulls/{PR_NUMBER}/requested_reviewers").mock(
         return_value=httpx.Response(201, json={})
@@ -274,6 +286,128 @@ class TestOutsiderSourceFlow:
 
         # No contributors endpoint was mocked — would fail if called
         assert len(reviewers) == 2
+
+
+ORG = REPO.split("/")[0]
+
+
+class TestTeamSquadFlow:
+    @respx.mock(base_url=BASE_URL, assert_all_called=False)
+    def test_squad_with_team_resolves_members(
+        self, tmp_path: Path, respx_mock: respx.MockRouter
+    ) -> None:
+        config_data = {
+            "strategy": "random",
+            "squads": [
+                {
+                    "name": "payments",
+                    "team": "payments-team",
+                    "paths": ["src/payments/**"],
+                },
+                {
+                    "name": "other",
+                    "members": ["zara"],
+                    "paths": ["lib/**"],
+                },
+            ],
+        }
+        config_path = tmp_path / "squads.yml"
+        config_path.write_text(yaml.dump(config_data))
+
+        _mock_pr_endpoint(respx_mock)
+        _mock_files_endpoint(respx_mock, ["src/payments/stripe.py"])
+        _mock_team_members_endpoint(
+            respx_mock, ORG, "payments-team", ["bob", "charlie"]
+        )
+
+        config = load_config(config_path)
+        client = GitHubClient(token="fake-token")
+
+        from who_reviews.main import _resolve_teams
+
+        _resolve_teams(config, client, ORG)
+
+        selector = ReviewerSelector(config, RandomStrategy())
+        files = client.get_changed_files(REPO, PR_NUMBER)
+        author = client.get_pr_author(REPO, PR_NUMBER)
+        reviewers = selector.select_reviewers(files, author, REPO, PR_NUMBER)
+
+        assert reviewers[0] in {"bob", "charlie"}
+
+    @respx.mock(base_url=BASE_URL, assert_all_called=False)
+    def test_squad_team_merges_with_members(
+        self, tmp_path: Path, respx_mock: respx.MockRouter
+    ) -> None:
+        config_data = {
+            "strategy": "random",
+            "squad_reviewers": 3,
+            "outsider_reviewers": 0,
+            "squads": [
+                {
+                    "name": "payments",
+                    "team": "payments-team",
+                    "members": ["dave"],
+                    "paths": ["src/payments/**"],
+                },
+            ],
+        }
+        config_path = tmp_path / "squads.yml"
+        config_path.write_text(yaml.dump(config_data))
+
+        _mock_pr_endpoint(respx_mock)
+        _mock_files_endpoint(respx_mock, ["src/payments/stripe.py"])
+        _mock_team_members_endpoint(
+            respx_mock, ORG, "payments-team", ["bob", "charlie"]
+        )
+
+        config = load_config(config_path)
+        client = GitHubClient(token="fake-token")
+
+        from who_reviews.main import _resolve_teams
+
+        _resolve_teams(config, client, ORG)
+
+        # dave (from members) + bob, charlie (from team)
+        assert set(config.squads[0].members) == {"bob", "charlie", "dave"}
+
+    @respx.mock(base_url=BASE_URL, assert_all_called=False)
+    def test_outsider_source_team(
+        self, tmp_path: Path, respx_mock: respx.MockRouter
+    ) -> None:
+        config_data = {
+            "strategy": "random",
+            "outsider_source": "team",
+            "outsider_team": "senior-devs",
+            "squads": [
+                {
+                    "name": "payments",
+                    "members": ["alice", "bob"],
+                    "paths": ["src/payments/**"],
+                },
+            ],
+        }
+        config_path = tmp_path / "squads.yml"
+        config_path.write_text(yaml.dump(config_data))
+
+        _mock_pr_endpoint(respx_mock)
+        _mock_files_endpoint(respx_mock, ["src/payments/stripe.py"])
+        _mock_team_members_endpoint(respx_mock, ORG, "senior-devs", ["zara", "yuki"])
+
+        config = load_config(config_path)
+        client = GitHubClient(token="fake-token")
+
+        from who_reviews.main import _resolve_outsiders
+
+        outsiders = _resolve_outsiders(config, client, REPO, ORG)
+
+        selector = ReviewerSelector(config, RandomStrategy())
+        files = client.get_changed_files(REPO, PR_NUMBER)
+        author = client.get_pr_author(REPO, PR_NUMBER)
+        reviewers = selector.select_reviewers(files, author, REPO, PR_NUMBER, outsiders)
+
+        # squad pick from {bob}, outsider from {zara, yuki}
+        assert reviewers[0] == "bob"
+        assert reviewers[1] in {"zara", "yuki"}
 
 
 class TestRetryIntegration:

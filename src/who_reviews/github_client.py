@@ -56,6 +56,9 @@ class GitHubClient:
     def get_collaborators(self, repo: str) -> list[str]:
         return self._paginate_logins(f"/repos/{repo}/collaborators")
 
+    def get_team_members(self, org: str, team_slug: str) -> list[str]:
+        return self._paginate_logins(f"/orgs/{org}/teams/{team_slug}/members")
+
     def _paginate_logins(self, url: str) -> list[str]:
         logins: list[str] = []
         page = 1

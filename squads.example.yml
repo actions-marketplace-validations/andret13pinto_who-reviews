@@ -1,5 +1,6 @@
 strategy: random  # random | round-robin | least-recent
-# outsider_source: contributors  # contributors | collaborators
+# outsider_source: contributors  # contributors | collaborators | team
+# outsider_team: senior-devs     # required when outsider_source is 'team'
 
 exclude:
   - dependabot[bot]
@@ -7,25 +8,21 @@ exclude:
 
 squads:
   - name: payments
-    members:
-      - alice
-      - bob
-      - charlie
+    team: payments-team              # members from GitHub team
     paths:
       - src/payments/**
       - src/billing/**
 
   - name: platform
+    team: platform-team              # GitHub team + extra members
     members:
-      - dave
-      - eve
-      - frank
+      - external-contractor
     paths:
       - src/infra/**
       - src/auth/**
 
   - name: growth
-    members:
+    members:                          # explicit members only
       - grace
       - heidi
     paths:

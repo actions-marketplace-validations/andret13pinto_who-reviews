@@ -25,6 +25,7 @@ By default, outsiders are picked only from squad members. You can expand the poo
 
 - **`contributors`** — people who have committed to the repo
 - **`collaborators`** — people with access to the repo (can include the entire org)
+- **`team`** — members of a specific GitHub team (requires `outsider_team`)
 
 You can filter out specific users (bots, service accounts) with the `exclude` config option.
 
@@ -44,7 +45,8 @@ By default, the action looks for the config file at `.github/squads.yml` — no 
 strategy: random  # random | round-robin | least-recent
 squad_reviewers: 1   # reviewers picked per affected squad (default: 1)
 outsider_reviewers: 1 # reviewers picked from outside affected squads (default: 1)
-# outsider_source: contributors  # contributors | collaborators
+# outsider_source: contributors  # contributors | collaborators | team
+# outsider_team: senior-devs     # required when outsider_source is 'team'
 
 exclude:           # users to never assign as reviewers (default: [])
   - dependabot[bot]
@@ -52,22 +54,27 @@ exclude:           # users to never assign as reviewers (default: [])
 
 squads:
   - name: payments
-    members: [alice, bob, charlie]   # inline list syntax
+    team: payments-team              # members from GitHub team
     paths:
       - src/payments/**
       - src/billing/**
 
   - name: platform
-    members:                          # multi-line syntax
-      - dave
-      - eve
-      - frank
+    team: platform-team              # GitHub team + extra members
+    members: [external-contractor]
     paths:
       - src/infra/**
       - src/auth/**
+
+  - name: growth
+    members: [grace, heidi]          # explicit members only
+    paths:
+      - src/growth/**
 ```
 
 Both list styles (`[a, b]` and multi-line `- a`) are valid YAML and work interchangeably for `members`, `paths`, and `exclude`.
+
+Squads can define members via `members`, `team` (a GitHub team slug), or both. When both are set, the members are merged.
 
 ### 2. Add the workflow
 
@@ -117,7 +124,8 @@ The config is validated on load. It will reject:
 | `squad_reviewers` | int | `1` | Reviewers picked per affected squad |
 | `outsider_reviewers` | int | `1` | Reviewers picked from outside affected squads |
 | `exclude` | list | `[]` | Users to never assign (bots, service accounts, etc.) |
-| `outsider_source` | string | not set | Where to fetch outsider candidates (`contributors` or `collaborators`) |
+| `outsider_source` | string | not set | Where to fetch outsider candidates (`contributors`, `collaborators`, or `team`) |
+| `outsider_team` | string | not set | GitHub team slug for outsider pool (required when `outsider_source: team`) |
 
 ## Development
 
